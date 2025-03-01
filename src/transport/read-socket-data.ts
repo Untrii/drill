@@ -1,14 +1,16 @@
 import { Socket } from 'node:net'
 
-export function readSocketData(socket: Socket) {
+export function readSocketData(socket: Socket, debug = false) {
   type Resolver = (payload: Buffer) => void
 
   const resolvers: Resolver[] = []
   const queue: Buffer[] = []
 
   socket.on('data', (data) => {
-    console.log('Data from socket', data.byteLength)
-
+    if (debug) {
+      console.log('Recieved data', data.byteLength)
+      console.log(Buffer.from(data).toString('utf-8'))
+    }
     try {
       if (resolvers.length) {
         resolvers.shift()!(data)

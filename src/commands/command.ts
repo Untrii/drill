@@ -5,9 +5,14 @@ import {
   type AllocatePortCommand,
 } from './allocate-port-command'
 import { decodeAuthCommand, encodeAuthCommand, type AuthCommand } from './auth-command'
-import { decodeClientHelloCommand, encodeClientHelloCommand, type ClientHelloCommand } from './client-hello-command'
+import { decodeClientHelloCommand, encodeClientHelloCommand, type HelloCommand } from './hello-command'
 import {
-  decodeConnectionCommand,
+  decodeCloseConnectionCommand,
+  encodeCloseConnectionCommand,
+  type CloseConnectionCommand,
+} from './close-connetion-command'
+import {
+  decodeEstablishConnectionCommand,
   encodeEstablishConnectionCommand,
   type EstablishConnectionCommand,
 } from './establish-connection-command'
@@ -15,27 +20,30 @@ import { decodeSendDataCommand, encodeSendDataCommand, type SendDataCommand } fr
 
 export enum CommandType {
   AUTH = 0x00,
-  CLIENT_HELLO = 0x01,
+  HELLO = 0x01,
   ALLOCATE_PORT = 0x10,
   ESTABLISH_CONNECTION = 0x11,
-  SEND_DATA = 0x12,
+  CLOSE_CONNECTION = 0x12,
+  SEND_DATA = 0x20,
 }
 
 export type AnyCommand =
   | AuthCommand
-  | ClientHelloCommand
+  | HelloCommand
   | AllocatePortCommand
   | EstablishConnectionCommand
   | SendDataCommand
+  | CloseConnectionCommand
 
 const COMMAND_TYPE_SIZE = 1
 const COMMAND_RESERVE_SIZE = 3
 
 const encodeByType = {
   [CommandType.AUTH]: encodeAuthCommand,
-  [CommandType.CLIENT_HELLO]: encodeClientHelloCommand,
+  [CommandType.HELLO]: encodeClientHelloCommand,
   [CommandType.ALLOCATE_PORT]: encodePortAllocationCommand,
   [CommandType.ESTABLISH_CONNECTION]: encodeEstablishConnectionCommand,
+  [CommandType.CLOSE_CONNECTION]: encodeCloseConnectionCommand,
   [CommandType.SEND_DATA]: encodeSendDataCommand,
 }
 
@@ -64,9 +72,10 @@ export class InvalidCommandTypeError extends Error {
 
 const decoderByType = {
   [CommandType.AUTH]: decodeAuthCommand,
-  [CommandType.CLIENT_HELLO]: decodeClientHelloCommand,
+  [CommandType.HELLO]: decodeClientHelloCommand,
   [CommandType.ALLOCATE_PORT]: decodePortAllocationCommand,
-  [CommandType.ESTABLISH_CONNECTION]: decodeConnectionCommand,
+  [CommandType.ESTABLISH_CONNECTION]: decodeEstablishConnectionCommand,
+  [CommandType.CLOSE_CONNECTION]: decodeCloseConnectionCommand,
   [CommandType.SEND_DATA]: decodeSendDataCommand,
 }
 

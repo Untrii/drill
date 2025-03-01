@@ -1,6 +1,7 @@
 interface PoolOptions {
   size?: number
   creationIntervalMs?: number
+  timeoutMs?: number
 }
 
 export function createPool<T>(
@@ -9,7 +10,7 @@ export function createPool<T>(
   onCreated?: (item: T) => void,
   options?: PoolOptions
 ) {
-  const { size = 4, creationIntervalMs = 500 } = options || {}
+  const { size = 4, creationIntervalMs = 500, timeoutMs = 5000 } = options || {}
 
   const usedItems = new Set<T>()
   const availableItems = new Set<T>()
@@ -47,8 +48,15 @@ export function createPool<T>(
   }
 
   const use = async (action: (item: T) => Promise<void>) => {
+    let startedAt = Date.now()
     cleanup()
+
     while (availableItems.size === 0) {
+      const timeElapsed = Date.now() - startedAt
+      if (timeElapsed > timeoutMs) {
+        throw new Error('Timeout')
+      }
+
       tryCreateItem()
 
       await new Promise<void>((resolve) => {

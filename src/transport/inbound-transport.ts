@@ -3,29 +3,29 @@ import { createCommandReader } from 'src/transport/command-reader'
 import { CommandType, type AnyCommand } from 'src/commands/command'
 import { validateAuthCommand } from '#commands/auth-command'
 import { createCommandWriter } from './command-writer'
+import { createHelloCommand } from '#commands/hello-command'
 
 const DEFAULT_NODE_PORT = Number(process.env.DEFAULT_NODE_PORT || 8035)
 
 interface Context {
   socket: Socket
-  clientId: string
+  nodeId: string
 }
 
-interface CommandInfo {
-  command: AnyCommand
-  context: Context
-}
-
-export async function createInboundTransport(password: string | null = null, port: number = DEFAULT_NODE_PORT) {
+export async function createInboundTransport(
+  currentNodeId: string,
+  password: string | null = null,
+  port: number = DEFAULT_NODE_PORT,
+  onCommand?: (command: AnyCommand, context: Context) => void
+) {
   password ??= ''
-
-  const commandQueue: CommandInfo[] = []
 
   const socketsById = new Map<string, Socket[]>()
 
   const server = createServer(async (socket) => {
     console.log('Server: Client connected')
     const commandReader = createCommandReader(socket)
+    const commandWriter = createCommandWriter(socket)
 
     socket.on('close', (hadError) => {
       console.log('Server: Client disconnected', hadError)
@@ -63,37 +63,45 @@ export async function createInboundTransport(password: string | null = null, por
       socket.destroy()
       return
     }
-    if (clientHelloCommand.type !== CommandType.CLIENT_HELLO) {
+    if (clientHelloCommand.type !== CommandType.HELLO) {
       console.log('Server: Client sent invalid client hello command')
       socket.destroy()
       return
     }
     console.log('Server: Client sent valid client hello command')
 
-    const clientId = clientHelloCommand.id
-    if (!socketsById.has(clientId)) {
-      socketsById.set(clientId, [])
+    const serverHelloCommand = createHelloCommand(currentNodeId)
+    try {
+      await commandWriter.writeCommand(serverHelloCommand)
+    } catch {
+      socket.destroy()
+      return
+    }
+    console.log('Server: Sent server hello command')
+
+    const nodeId = clientHelloCommand.nodeId
+    if (!socketsById.has(nodeId)) {
+      socketsById.set(nodeId, [])
     }
 
-    socketsById.get(clientId)!.push(socket)
+    socketsById.get(nodeId)!.push(socket)
 
     socket.once('close', () => {
-      const newSocketsByCurrentId = socketsById.get(clientId)?.filter((knownSocket) => knownSocket !== socket) ?? []
-      socketsById.set(clientId, newSocketsByCurrentId)
+      const newSocketsByCurrentId = socketsById.get(nodeId)?.filter((knownSocket) => knownSocket !== socket) ?? []
+      socketsById.set(nodeId, newSocketsByCurrentId)
     })
 
     const context = {
       socket,
-      clientId,
+      nodeId,
     }
 
     try {
       while (!socket.closed) {
         const command = await commandReader.readCommand()
-        commandQueue.push({ command, context })
+        onCommand?.(command, context)
       }
     } catch (error) {
-      console.log('Probably socket closed here', error)
       socket.destroy()
     }
   })
@@ -114,35 +122,22 @@ export async function createInboundTransport(password: string | null = null, por
     })
   }
 
-  const readCommand = async () => {
-    while (commandQueue.length === 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 1))
-    }
-
-    return commandQueue.shift()!
-  }
-
-  const readCommands = async function* () {
-    while (true) {
-      const commandInfo = await readCommand()
-      yield commandInfo
-    }
-  }
-
-  const writeCommandTo = (clientId: string, command: AnyCommand) => {
+  const writeCommandTo = async (clientId: string, command: AnyCommand) => {
     const sockets = socketsById.get(clientId)
     if (!sockets?.length) throw new Error('Missing connection')
 
     const socket = sockets[Math.floor(Math.random() * sockets.length)]
     const commandWriter = createCommandWriter(socket)
 
-    commandWriter.writeCommand(command)
+    await commandWriter.writeCommand(command)
   }
 
   return {
     destroy,
-    readCommand,
-    readCommands,
     writeCommandTo,
   }
 }
+
+type Depromisify<T> = T extends (...args: infer A) => Promise<infer R> ? (...args: A) => R : never
+
+export type InboundTransport = ReturnType<Depromisify<typeof createInboundTransport>>
