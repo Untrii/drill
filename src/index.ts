@@ -23,14 +23,14 @@ async function createDrill(config: Config) {
     return false
   }
 
-  const getLinkedPort = (nodeId: string, port: number) => {
+  const getLinkedOutboundPort = (nodeId: string, inboundPort: number) => {
     const transport = outboundTransports.find((transport) => transport.nodeId === nodeId)
     if (!transport) return null
 
     const nodeHost = transport.host
     const forwardConfig = config.forward?.find((forwardConfig) => {
       const normalizedAddress = normalizeAddress(forwardConfig.from)
-      return normalizedAddress.host === nodeHost && normalizedAddress.port === port
+      return normalizedAddress.host === nodeHost && normalizedAddress.port === inboundPort
     })
 
     if (!forwardConfig) return null
@@ -44,7 +44,7 @@ async function createDrill(config: Config) {
     }
 
     if (command.type === CommandType.ESTABLISH_CONNECTION) {
-      const linkedPort = getLinkedPort(context.nodeId, command.port)
+      const linkedPort = getLinkedOutboundPort(context.nodeId, command.port)
       if (!linkedPort) return
       outboundForwarder.establishConnection(context.nodeId, command.connectionId, linkedPort)
     }

@@ -4,22 +4,53 @@ import { createSendDataCommand } from '#commands/send-data-command'
 import { Socket } from 'node:net'
 import { readSocketData } from 'src/transport/read-socket-data'
 
+interface ConnectionContext {
+  socket: Socket
+  nodeId: string
+  connectionId: string
+  updatedAt: number
+}
+
+const CONNECTION_LIFETIME_MS = 10000
+
 export function createOutboundForwarder(writeCommandTo: (nodeId: string, command: AnyCommand) => Promise<void>) {
-  const connectionById = new Map<string, Socket>()
+  const contextByConnectionId = new Map<string, ConnectionContext>()
+
+  setInterval(() => {
+    for (const [connectionId, context] of contextByConnectionId) {
+      if (Date.now() - context.updatedAt > CONNECTION_LIFETIME_MS) {
+        closeConnection(connectionId)
+      }
+    }
+  }, 1000)
+
   const establishConnection = async (nodeId: string, connectionId: string, port: number) => {
+    const context = contextByConnectionId.get(connectionId)
+
+    if (context?.nodeId === nodeId) {
+      context.updatedAt = Date.now()
+    }
+
+    if (context) return
+
     const socket = new Socket()
 
-    connectionById.set(connectionId, socket)
+    contextByConnectionId.set(connectionId, {
+      socket,
+      nodeId,
+      connectionId,
+      updatedAt: Date.now(),
+    })
     console.log('Added connection', connectionId)
 
     socket.connect(port, 'localhost')
 
     socket.on('close', () => {
-      connectionById.delete(connectionId)
+      contextByConnectionId.delete(connectionId)
     })
 
     socket.on('error', () => {
-      connectionById.delete(connectionId)
+      contextByConnectionId.delete(connectionId)
     })
 
     const socketData = readSocketData(socket)
@@ -27,7 +58,6 @@ export function createOutboundForwarder(writeCommandTo: (nodeId: string, command
     while (!socket.closed) {
       const dataPart = await socketData.next()
       const command = createSendDataCommand(connectionId, dataPart.buffer)
-      console.log(`Reading ${dataPart.buffer.byteLength} bytes from connection ${connectionId}`)
 
       try {
         await writeCommandTo(nodeId, command)
@@ -44,16 +74,19 @@ export function createOutboundForwarder(writeCommandTo: (nodeId: string, command
   }
 
   const writeToConnection = (connectionId: string, data: ArrayBufferLike) => {
-    console.log(`Writing ${data.byteLength} bytes to connection ${connectionId}`)
-    const connection = connectionById.get(connectionId)
-    if (!connection) console.warn('Connection not found!')
-    connection?.write(new Uint8Array(data))
+    const context = contextByConnectionId.get(connectionId)
+    if (!context) {
+      console.warn('Connection not found!')
+    }
+
+    context?.socket.write(new Uint8Array(data))
   }
 
   const closeConnection = (connectionId: string) => {
-    const socket = connectionById.get(connectionId)
+    const context = contextByConnectionId.get(connectionId)
+    const socket = context?.socket
     socket?.destroy()
-    connectionById.delete(connectionId)
+    contextByConnectionId.delete(connectionId)
   }
 
   return {
