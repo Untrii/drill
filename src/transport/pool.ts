@@ -10,7 +10,7 @@ export function createPool<T>(
   onCreated?: (item: T) => void,
   options?: PoolOptions
 ) {
-  const { size = 4, creationIntervalMs = 500, timeoutMs = 5000 } = options || {}
+  const { size = 8, creationIntervalMs = 1000, timeoutMs = 5000 } = options || {}
 
   const usedItems = new Set<T>()
   const availableItems = new Set<T>()

@@ -41,11 +41,12 @@ export function createOutboundForwarder(writeCommandTo: (nodeId: string, command
       connectionId,
       updatedAt: Date.now(),
     })
-    console.log('Added connection', connectionId)
+    console.log('Forwarder: Recieved connection', connectionId)
 
     socket.connect(port, 'localhost')
 
     socket.on('close', () => {
+      console.log('Forwarder: Connection closed', connectionId)
       contextByConnectionId.delete(connectionId)
     })
 
@@ -75,10 +76,6 @@ export function createOutboundForwarder(writeCommandTo: (nodeId: string, command
 
   const writeToConnection = (connectionId: string, data: ArrayBufferLike) => {
     const context = contextByConnectionId.get(connectionId)
-    if (!context) {
-      console.warn('Connection not found!')
-    }
-
     context?.socket.write(new Uint8Array(data))
   }
 

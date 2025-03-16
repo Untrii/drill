@@ -4,6 +4,7 @@ import { CommandType, type AnyCommand } from 'src/commands/command'
 import { validateAuthCommand } from '#commands/auth-command'
 import { createCommandWriter } from './command-writer'
 import { createHelloCommand } from '#commands/hello-command'
+import { withRetry } from '#lib/with-retry'
 
 const DEFAULT_NODE_PORT = Number(process.env.DEFAULT_NODE_PORT || 8035)
 
@@ -20,22 +21,18 @@ export async function createInboundTransport(
 ) {
   password ??= ''
 
-  const socketsById = new Map<string, Socket[]>()
+  const socketsByNodeId = new Map<string, Socket[]>()
 
   const server = createServer(async (socket) => {
-    console.log('Server: Client connected')
+    console.log('Transport: New incoming connection')
     const commandReader = createCommandReader(socket)
     const commandWriter = createCommandWriter(socket)
-
-    socket.on('close', (hadError) => {
-      console.log('Server: Client disconnected', hadError)
-    })
 
     let authCommand: AnyCommand
     try {
       authCommand = await commandReader.readCommand()
     } catch {
-      console.log('Failed to read auth command')
+      console.log('Transport: Failed to read auth command')
       socket.destroy()
       return
     }
@@ -47,28 +44,28 @@ export async function createInboundTransport(
     try {
       await validateAuthCommand(password, authCommand)
     } catch (error) {
-      console.log('Failed to validate auth command')
+      console.log('Transport: Failed to validate auth command')
       if (error instanceof Error) console.warn(error.message)
 
       socket.destroy()
       return
     }
-    console.log('Server: Client sent valid auth command')
+    console.log('Transport: Node sent valid auth command')
 
     let clientHelloCommand: AnyCommand
     try {
       clientHelloCommand = await commandReader.readCommand()
     } catch {
-      console.log('Failed to read client hello command')
+      console.log('Transport: Failed to read hello command')
       socket.destroy()
       return
     }
     if (clientHelloCommand.type !== CommandType.HELLO) {
-      console.log('Server: Client sent invalid client hello command')
+      console.log('Transport: Node sent invalid hello command')
       socket.destroy()
       return
     }
-    console.log('Server: Client sent valid client hello command')
+    console.log('Transport: Node sent valid hello command')
 
     const serverHelloCommand = createHelloCommand(currentNodeId)
     try {
@@ -77,18 +74,20 @@ export async function createInboundTransport(
       socket.destroy()
       return
     }
-    console.log('Server: Sent server hello command')
+    console.log('Transport: Sent hello command to node')
 
     const nodeId = clientHelloCommand.nodeId
-    if (!socketsById.has(nodeId)) {
-      socketsById.set(nodeId, [])
+    if (!socketsByNodeId.has(nodeId)) {
+      socketsByNodeId.set(nodeId, [])
     }
 
-    socketsById.get(nodeId)!.push(socket)
+    socketsByNodeId.get(nodeId)!.push(socket)
 
     socket.once('close', () => {
-      const newSocketsByCurrentId = socketsById.get(nodeId)?.filter((knownSocket) => knownSocket !== socket) ?? []
-      socketsById.set(nodeId, newSocketsByCurrentId)
+      console.log('Transport: Connection closed, nodeId', nodeId)
+
+      const newSocketsByCurrentId = socketsByNodeId.get(nodeId)?.filter((knownSocket) => knownSocket !== socket) ?? []
+      socketsByNodeId.set(nodeId, newSocketsByCurrentId)
     })
 
     const context = {
@@ -123,13 +122,15 @@ export async function createInboundTransport(
   }
 
   const writeCommandTo = async (clientId: string, command: AnyCommand) => {
-    const sockets = socketsById.get(clientId)
-    if (!sockets?.length) throw new Error('Missing connection')
+    await withRetry(async () => {
+      const sockets = socketsByNodeId.get(clientId)
+      if (!sockets?.length) throw new Error('Missing connection')
 
-    const socket = sockets[Math.floor(Math.random() * sockets.length)]
-    const commandWriter = createCommandWriter(socket)
+      const socket = sockets[Math.floor(Math.random() * sockets.length)]
+      const commandWriter = createCommandWriter(socket)
 
-    await commandWriter.writeCommand(command)
+      await commandWriter.writeCommand(command)
+    })
   }
 
   return {

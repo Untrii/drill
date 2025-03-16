@@ -7,6 +7,7 @@ import { createPool } from './pool'
 import { CommandType, type AnyCommand } from '#commands/command'
 import { createCommandReader } from './command-reader'
 import { normalizeAddress } from '#lib/normalize'
+import { withRetry } from '#lib/with-retry'
 
 interface Context {
   socket: Socket
@@ -25,7 +26,7 @@ export function createOutboundTransport(
   password ??= ''
 
   const createSocket = async () => {
-    console.log(`Client: Connecting to ${address.host}:${address.port}`)
+    console.log(`Transport: Connecting to ${address.host}:${address.port}`)
     const socket = new Socket()
 
     await new Promise<void>((resolve, reject) => {
@@ -39,18 +40,18 @@ export function createOutboundTransport(
 
     const authCommand = await createAuthCommand(password)
     await commandWriter.writeCommand(authCommand)
-    console.log(`Client: Sent auth command to ${address.host}:${address.port}`)
+    console.log(`Transport: Sent auth command to ${address.host}:${address.port}`)
 
     const clientHelloCommand = createHelloCommand(currentNodeId)
     await commandWriter.writeCommand(clientHelloCommand)
-    console.log(`Client: Sent client hello command to ${address.host}:${address.port}`)
+    console.log(`Transport: Sent hello command to ${address.host}:${address.port}`)
 
     const serverHelloCommand = await commandReader.readCommand()
     if (serverHelloCommand.type !== CommandType.HELLO) {
       socket.destroy()
-      throw new Error(`Expected server hello command, got ${serverHelloCommand.type}`)
+      throw new Error(`Transport: Expected hello command, got ${serverHelloCommand.type}`)
     }
-    console.log(`Client: Received server hello command from ${address.host}:${address.port}`)
+    console.log(`Transport: Received hello command from ${address.host}:${address.port}`)
 
     connectedNodeId = serverHelloCommand.nodeId
 
@@ -82,9 +83,11 @@ export function createOutboundTransport(
   const socketPool = createSocketPool()
 
   const writeCommand = async (command: AnyCommand) => {
-    await socketPool.use(async ([socket]) => {
-      const commandWriter = createCommandWriter(socket)
-      await commandWriter.writeCommand(command)
+    await withRetry(async () => {
+      await socketPool.use(async ([socket]) => {
+        const commandWriter = createCommandWriter(socket)
+        await commandWriter.writeCommand(command)
+      })
     })
   }
 

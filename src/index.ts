@@ -1,16 +1,18 @@
 import { createAllocatePortCommand } from '#commands/allocate-port-command'
 import { CommandType, type AnyCommand } from '#commands/command'
+import { getMachineId } from '#lib/get-machine-id'
 import { normalizeAddress, normalizePortRange } from '#lib/normalize'
-import type { Config } from '#schemas/config.schema'
+import { validateConfig, type Config } from '#schemas/config.schema'
+import { exit } from 'node:process'
 import { createInboundForwarder } from './forward/create-inbound-forwarder'
 import { createOutboundForwarder } from './forward/create-outbound-forwarder'
 import { createInboundTransport, type InboundTransport } from './transport/inbound-transport'
 import { createOutboundTransport, type OutboundTransport } from './transport/outbound-transport'
-import type { TransportContext } from './transport/transport-context'
+import { type TransportContext } from './transport/transport-context'
+import fs from 'node:fs'
 
 async function createDrill(config: Config) {
-  const nodeId =
-    process.argv[2] === 'server' ? '6336c896-5b17-437e-8556-cf9b4a50060b' : '9de1aabf-38f1-4119-a1a0-197104719119'
+  const nodeId = getMachineId()
   console.log('Node ID:', nodeId)
 
   const canExposePort = (port: number) => {
@@ -88,50 +90,40 @@ async function createDrill(config: Config) {
 
     const targetTransport = outboundTransports.find((transport) => transport.host === normalizedFrom.host)
     if (!targetTransport) {
-      console.warn(`You didn't specified node with host ${normalizedFrom.host}`)
+      console.warn(`Core: You didn't specified node with host ${normalizedFrom.host}`)
       continue
     }
 
     const allocatePortCommand = createAllocatePortCommand(normalizedFrom.port)
     targetTransport.writeCommand(allocatePortCommand).catch(() => {
-      console.log('Failed to start forwarding')
+      console.log('Core: Failed to start forwarding')
     })
 
     setInterval(() => {
       const allocatePortCommand = createAllocatePortCommand(normalizedFrom.port)
       targetTransport.writeCommand(allocatePortCommand).catch(() => {
-        console.log('Failed to start forwarding')
+        console.log('Core: Failed to start forwarding')
       })
     }, 10000)
   }
 }
 
-const clientConfig: Config = {
-  nodes: [
-    {
-      address: 'localhost:8035',
-      password: 'password',
-    },
-  ],
-  forward: [
-    {
-      from: {
-        host: 'localhost',
-        port: 45123,
-      },
-      to: {
-        host: 'localhost',
-        port: 3000,
-      },
-    },
-  ],
+const defaultConfigFileName = 'drillrc.json'
+const configFileName = process.argv[2] ?? defaultConfigFileName
+if (!fs.existsSync(configFileName)) {
+  console.log(
+    `Core: Config file ${configFileName} not found. You have to create ${defaultConfigFileName} file or pass config file name as first argument.`
+  )
+  exit(1)
 }
 
-const serverConfig: Config = {
-  nodePort: 8035,
-  password: 'password',
-  exposePorts: [[45000, 46000]],
+const config = JSON.parse(fs.readFileSync(configFileName, 'utf-8'))
+const isConfigValid = validateConfig(config)
+
+if (!isConfigValid) {
+  console.log('Core: Invalid config')
+  console.log(validateConfig.errors)
+  exit(1)
 }
 
-if (process.argv[2] === 'client') createDrill(clientConfig)
-if (process.argv[2] === 'server') createDrill(serverConfig)
+createDrill(config)

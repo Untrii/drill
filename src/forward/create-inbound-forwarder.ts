@@ -39,11 +39,11 @@ export function createInboundForwarder(writeCommandTo: (nodeId: string, command:
       return
     }
 
-    console.log('Allocated port', port)
+    console.log('Forwarder: Allocated port', port)
     const server = createServer(async (socket) => {
-      console.log('Client connected to allocated port', port)
-
       const connectionId = crypto.randomUUID()
+      console.log(`Forwarder: Client connected to allocated port ${port}, assigned connection id: ${connectionId}`)
+
       const establishConnectionCommand = createEstablishConnectionCommand(connectionId, port)
       connectionById.set(establishConnectionCommand.connectionId, socket)
 
@@ -52,7 +52,7 @@ export function createInboundForwarder(writeCommandTo: (nodeId: string, command:
       }, 1000)
 
       socket.on('close', () => {
-        console.log('Client disconnected from allocated port', port)
+        console.log(`Forwarder: Client disconnected from allocated port ${port}, connection id: ${connectionId}`)
 
         if (keepAliveIntervalId) clearInterval(keepAliveIntervalId)
         keepAliveIntervalId = null
@@ -66,7 +66,7 @@ export function createInboundForwarder(writeCommandTo: (nodeId: string, command:
       try {
         await writeCommandTo(nodeId, establishConnectionCommand)
       } catch {
-        console.log('Failed to write establish connection command')
+        console.log('Forwarder: Failed to write establish connection command')
         socket.destroy()
         return
       }
@@ -103,14 +103,14 @@ export function createInboundForwarder(writeCommandTo: (nodeId: string, command:
   }
 
   const deallocatePort = (port: number) => {
-    console.log('Deallocating port', port)
+    console.log('Forwarder: Deallocating port', port)
     const context = contextByPort.get(port)
     context?.server.close()
     contextByPort.delete(port)
   }
 
   const closeConnection = (id: string) => {
-    console.log('Closing connection')
+    console.log('Forwarder: Closing connection')
     const socket = connectionById.get(id)
     socket?.destroy()
     connectionById.delete(id)
@@ -118,7 +118,6 @@ export function createInboundForwarder(writeCommandTo: (nodeId: string, command:
 
   const writeToConnection = (id: string, data: ArrayBufferLike) => {
     const connection = connectionById.get(id)
-    if (!connection) console.warn('Connection not found!')
     connection?.write(new Uint8Array(data))
   }
 

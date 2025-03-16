@@ -4,8 +4,8 @@ import type { JSONSchemaType } from 'ajv'
 export type Port = number
 export const portSchema: JSONSchemaType<Port> = {
   type: 'number',
-  min: 1024,
-  max: 65535,
+  minimum: 1,
+  maximum: 65535,
 }
 
 export type PortRange = number[]
