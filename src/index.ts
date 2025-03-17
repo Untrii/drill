@@ -57,7 +57,6 @@ async function createDrill(config: Config) {
     }
 
     if (command.type === CommandType.SEND_DATA) {
-      console.log('Debug: Send data command, size: ', command.data.byteLength)
       inboundForwarder?.writeToConnection(command.connectionId, command.data)
       outboundForwarder?.writeToConnection(command.connectionId, command.data)
     }
