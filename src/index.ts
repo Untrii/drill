@@ -25,7 +25,7 @@ async function createDrill(config: Config) {
     return false
   }
 
-  const getLinkedOutboundPort = (nodeId: string, inboundPort: number) => {
+  const getLinkedOutboundAddress = (nodeId: string, inboundPort: number) => {
     const transport = outboundTransports.find((transport) => transport.nodeId === nodeId)
     if (!transport) return null
 
@@ -36,7 +36,7 @@ async function createDrill(config: Config) {
     })
 
     if (!forwardConfig) return null
-    return normalizeAddress(forwardConfig.to).port
+    return forwardConfig.to
   }
 
   const processIncomingCommands = async (command: AnyCommand, context: TransportContext) => {
@@ -46,9 +46,9 @@ async function createDrill(config: Config) {
     }
 
     if (command.type === CommandType.ESTABLISH_CONNECTION) {
-      const linkedPort = getLinkedOutboundPort(context.nodeId, command.port)
-      if (!linkedPort) return
-      outboundForwarder.establishConnection(context.nodeId, command.connectionId, linkedPort)
+      const linkedAddress = getLinkedOutboundAddress(context.nodeId, command.port)
+      if (!linkedAddress) return
+      outboundForwarder.establishConnection(context.nodeId, command.connectionId, linkedAddress)
     }
 
     if (command.type === CommandType.CLOSE_CONNECTION) {
@@ -57,6 +57,7 @@ async function createDrill(config: Config) {
     }
 
     if (command.type === CommandType.SEND_DATA) {
+      console.log('Debug: Send data command, size: ', command.data.byteLength)
       inboundForwarder?.writeToConnection(command.connectionId, command.data)
       outboundForwarder?.writeToConnection(command.connectionId, command.data)
     }

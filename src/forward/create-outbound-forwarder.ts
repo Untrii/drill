@@ -1,6 +1,8 @@
 import { createCloseConnectionCommand } from '#commands/close-connetion-command'
 import type { AnyCommand } from '#commands/command'
 import { createSendDataCommand } from '#commands/send-data-command'
+import { normalizeAddress } from '#lib/normalize'
+import type { Address } from '#schemas/config.schema'
 import { Socket } from 'node:net'
 import { readSocketData } from 'src/transport/read-socket-data'
 
@@ -24,7 +26,8 @@ export function createOutboundForwarder(writeCommandTo: (nodeId: string, command
     }
   }, 1000)
 
-  const establishConnection = async (nodeId: string, connectionId: string, port: number) => {
+  const establishConnection = async (nodeId: string, connectionId: string, to: Address) => {
+    const normalizedTo = normalizeAddress(to)
     const context = contextByConnectionId.get(connectionId)
 
     if (context?.nodeId === nodeId) {
@@ -43,7 +46,7 @@ export function createOutboundForwarder(writeCommandTo: (nodeId: string, command
     })
     console.log('Forwarder: Recieved connection', connectionId)
 
-    socket.connect(port, 'localhost')
+    socket.connect(normalizedTo.port, normalizedTo.host)
 
     socket.on('close', () => {
       console.log('Forwarder: Connection closed', connectionId)
@@ -68,7 +71,7 @@ export function createOutboundForwarder(writeCommandTo: (nodeId: string, command
       }
     }
 
-    const closeConnectionCommand = createCloseConnectionCommand(connectionId, port)
+    const closeConnectionCommand = createCloseConnectionCommand(connectionId, normalizedTo.port)
     try {
       await writeCommandTo(nodeId, closeConnectionCommand)
     } catch {}

@@ -1,12 +1,25 @@
 export function uuidStringToBuffer(uuid: string) {
   const hexValue = uuid.replaceAll('-', '')
-  const buffer = Buffer.from(hexValue, 'hex')
-  return buffer.buffer.slice(0, 16)
+
+  const buffer = new ArrayBuffer(16)
+  const view = new Uint8Array(buffer)
+
+  for (let i = 0; i < 16; i++) {
+    view[i] = parseInt(hexValue.slice(i * 2, i * 2 + 2), 16)
+  }
+
+  return buffer
 }
 
 export function uuidBufferToString(uuid: ArrayBufferLike) {
-  const buffer = Buffer.from(uuid)
-  const hexValue = buffer.toString('hex')
+  const view = new Uint8Array(uuid)
+  const byteHexValues: string[] = []
+
+  for (let i = 0; i < 16; i++) {
+    byteHexValues.push(view[i].toString(16).padStart(2, '0'))
+  }
+
+  const hexValue = byteHexValues.join('')
 
   const parts = [
     hexValue.slice(0, 8),
