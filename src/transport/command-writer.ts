@@ -2,19 +2,16 @@ import { encodeCommand, type AnyCommand } from '#commands/command'
 import type { Socket } from 'node:net'
 
 export function createCommandWriter(socket: Socket) {
-  const writeCommand = (command: AnyCommand) => {
+  const writeCommand = async (command: AnyCommand) => {
     const encodedCommand = encodeCommand(command)
-    return new Promise<void>((resolve, reject) => {
-      if (socket.closed) reject(new Error('Socket is closed'))
 
-      socket.write(new Uint8Array(encodedCommand), (error) => {
-        if (error) {
-          reject(error)
-        } else {
-          resolve()
-        }
-      })
-    })
+    if (socket.closed) throw new Error('Socket is closed')
+
+    const isFlushed = socket.write(new Uint8Array(encodedCommand))
+
+    if (!isFlushed) {
+      await new Promise((resolve) => socket.once('drain', resolve))
+    }
   }
 
   return { writeCommand }
