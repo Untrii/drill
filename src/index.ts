@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import '#globals/gc'
 import { createAllocatePortCommand } from '#commands/allocate-port-command'
 import { CommandType, type AnyCommand } from '#commands/command'
@@ -128,3 +130,11 @@ if (!isConfigValid) {
 }
 
 createDrill(config)
+
+setInterval(() => {
+  const memoryUsage = process.memoryUsage()
+  const prettifiedHeapUsage = (memoryUsage.heapUsed / 1024 / 1024).toFixed(2) + 'MB'
+  const prettifiedArrayBuffersUsage = (memoryUsage.arrayBuffers / 1024 / 1024).toFixed(2) + 'MB'
+
+  console.log(`Core: Memory allocation:\nHeap: ${prettifiedHeapUsage}  ArrayBuffers: ${prettifiedArrayBuffersUsage}`)
+}, 5000)

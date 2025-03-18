@@ -16,6 +16,12 @@ export function createPool<T>(
   const availableItems = new Set<T>()
   const pendingItems = new Set<Promise<T>>()
 
+  setInterval(() => {
+    console.log(
+      `Transport: Pool size: pending - ${pendingItems.size}, used - ${usedItems.size}, available - ${availableItems.size}`
+    )
+  }, 5000)
+
   let lastCreationTime = Date.now()
 
   const tryCreateItem = () => {
