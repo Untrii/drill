@@ -1,3 +1,4 @@
+import '#globals/gc'
 import { createAllocatePortCommand } from '#commands/allocate-port-command'
 import { CommandType, type AnyCommand } from '#commands/command'
 import { getMachineId } from '#lib/get-machine-id'

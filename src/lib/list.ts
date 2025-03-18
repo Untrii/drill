@@ -1,3 +1,5 @@
+import { tryGC } from '#globals/gc'
+
 export class List {
   #buffer = new ArrayBuffer(16)
   #length = 0
@@ -11,6 +13,8 @@ export class List {
       const newBuffer = new ArrayBuffer(newBufferCapacity)
       new Uint8Array(newBuffer).set(new Uint8Array(this.#buffer, 0, this.#length))
       this.#buffer = newBuffer
+
+      tryGC()
     }
 
     new Uint8Array(this.#buffer, this.#length).set(new Uint8Array(data))
@@ -24,11 +28,15 @@ export class List {
 
     this.#buffer = newBuffer
     this.#length -= size
+
+    tryGC()
   }
 
   clear() {
     this.#buffer = new ArrayBuffer(16)
     this.#length = 0
+
+    tryGC()
   }
 
   toArrayBuffer() {
